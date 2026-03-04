@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The U — Hurricane News Feed</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,600;1,300&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --orange: #F47321;
+    --green: #005030;
+    --dark: #0a0a0a;
+    --card: #111111;
+    --border: #1e1e1e;
+    --text: #e8e8e8;
+    --muted: #666;
+    --white: #ffffff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--dark);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 0;
+    border-bottom: 3px solid var(--orange);
+    background: linear-gradient(180deg, #0d0d0d 0%, var(--dark) 100%);
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px 14px;
+    gap: 20px;
+  }
+
+  .logo-block {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .u-logo {
+    width: 54px;
+    height: 54px;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .header-text h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.6rem;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    color: var(--white);
+  }
+
+  .header-text h1 span { color: var(--orange); }
+
+  .header-text .tagline {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.25em;
+    color: var(--green);
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .last-updated {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .refresh-btn {
+    background: var(--orange);
+    color: #000;
+    border: none;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1rem;
+    letter-spacing: 0.12em;
+    padding: 8px 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+  }
+
+  .refresh-btn:hover { background: #ff8533; transform: scale(1.03); }
+  .refresh-btn:active { transform: scale(0.97); }
+  .refresh-btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+  .source-bar {
+    display: flex;
+    gap: 0;
+    padding: 0 32px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .source-bar::-webkit-scrollbar { display: none; }
+
+  .source-tab {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 14px;
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s;
+    user-select: none;
+  }
+
+  .source-tab:hover { color: var(--orange); }
+  .source-tab.active { color: var(--orange); }
+
+  main {
+    position: relative;
+    z-index: 5;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px 24px 60px;
+  }
+
+  /* Loading state */
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 20px;
+    gap: 20px;
+  }
+
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--orange);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+  /* Empty / error state */
+  .empty-state {
+    text-align: center;
+    padding: 80px 20px;
+  }
+
+  .empty-state .big-u {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 8rem;
+    color: var(--border);
+    line-height: 1;
+  }
+
+  .empty-state p {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-top: 12px;
+  }
+
+  /* Feed items */
+  .feed-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+
+  .feed-count {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+
+  .feed-count span { color: var(--orange); }
+
+  .feed-filter {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .news-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .news-item {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0 20px;
+    align-items: start;
+    animation: fadeSlideIn 0.35s ease both;
+    cursor: pointer;
+    transition: background 0.15s;
+    padding-left: 12px;
+    padding-right: 12px;
+    margin: 0 -12px;
+    border-radius: 2px;
+  }
+
+  .news-item:hover { background: rgba(244, 115, 33, 0.04); }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .item-num {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.65rem;
+    color: var(--border);
+    padding-top: 4px;
+    user-select: none;
+    min-width: 24px;
+  }
+
+  .item-body { min-width: 0; }
+
+  .item-source-tag {
+    display: inline-block;
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #000;
+    background: var(--orange);
+    padding: 2px 6px;
+    margin-bottom: 6px;
+    font-weight: 700;
+  }
+
+  .item-source-tag.green { background: var(--green); color: var(--white); }
+  .item-source-tag.gray { background: #333; color: var(--text); }
+
+  .item-headline {
+    font-size: 1.0rem;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--white);
+    margin-bottom: 6px;
+  }
+
+  .item-summary {
+    font-size: 0.82rem;
+    font-weight: 300;
+    line-height: 1.5;
+    color: #999;
+    margin-bottom: 8px;
+  }
+
+  .item-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .item-time {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .item-category {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.12em;
+    color: var(--green);
+    text-transform: uppercase;
+  }
+
+  .item-link {
+    flex-shrink: 0;
+    padding-top: 4px;
+  }
+
+  .item-link a {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.65rem;
+    color: var(--orange);
+    text-decoration: none;
+    letter-spacing: 0.1em;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+  }
+
+  .item-link a:hover { opacity: 1; }
+
+  /* Breaking news banner */
+  .breaking-banner {
+    background: var(--orange);
+    color: #000;
+    padding: 8px 16px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.1em;
+    font-size: 0.95rem;
+    clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 8px 100%);
+    animation: fadeSlideIn 0.4s ease;
+  }
+
+  .breaking-label {
+    background: #000;
+    color: var(--orange);
+    padding: 2px 8px;
+    font-size: 0.75rem;
+  }
+
+  /* Divider with section label */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 28px 0 20px;
+  }
+
+  .section-divider span {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.85rem;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Ticker */
+  .ticker-wrap {
+    background: var(--green);
+    overflow: hidden;
+    padding: 6px 0;
+    position: relative;
+  }
+
+  .ticker-track {
+    display: flex;
+    gap: 0;
+    animation: ticker 30s linear infinite;
+    white-space: nowrap;
+  }
+
+  .ticker-item {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    color: rgba(255,255,255,0.8);
+    padding: 0 32px;
+    text-transform: uppercase;
+  }
+
+  .ticker-item::before {
+    content: '◆';
+    color: var(--orange);
+    margin-right: 12px;
+  }
+
+  @keyframes ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  /* Footer */
+  footer {
+    position: relative;
+    z-index: 5;
+    border-top: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  footer p {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  .powered {
+    color: var(--orange);
+    font-weight: 700;
+  }
+
+  @media (max-width: 600px) {
+    .header-top { padding: 14px 16px; }
+    .header-text h1 { font-size: 1.8rem; }
+    .source-bar { padding: 0 16px; }
+    main { padding: 20px 16px 48px; }
+    footer { padding: 16px; flex-direction: column; gap: 6px; }
+    .news-item { grid-template-columns: auto 1fr; }
+    .item-link { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div class="logo-block">
+      <svg class="u-logo" viewBox="0 0 54 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="27" cy="27" r="26" stroke="#F47321" stroke-width="2"/>
+        <text x="27" y="38" font-family="'Bebas Neue', sans-serif" font-size="28" fill="#F47321" text-anchor="middle">U</text>
+        <circle cx="27" cy="27" r="22" stroke="#005030" stroke-width="1" stroke-dasharray="3 4"/>
+      </svg>
+      <div class="header-text">
+        <h1>CANES<span>WIRE</span></h1>
+        <div class="tagline">Miami Hurricanes · Live News Feed</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="last-updated" id="lastUpdated">NOT YET FETCHED</div>
+      <button class="refresh-btn" id="refreshBtn" onclick="fetchNews()">▶ FETCH NEWS</button>
+    </div>
+  </div>
+  <div class="source-bar" id="sourceBar">
+    <div class="source-tab active" data-filter="all" onclick="filterFeed(this, 'all')">ALL SOURCES</div>
+    <div class="source-tab" data-filter="ESPN" onclick="filterFeed(this, 'ESPN')">ESPN</div>
+    <div class="source-tab" data-filter="247Sports" onclick="filterFeed(this, '247Sports')">247SPORTS</div>
+    <div class="source-tab" data-filter="On3" onclick="filterFeed(this, 'On3')">ON3</div>
+    <div class="source-tab" data-filter="Rivals" onclick="filterFeed(this, 'Rivals')">RIVALS</div>
+    <div class="source-tab" data-filter="Miami Herald" onclick="filterFeed(this, 'Miami Herald')">HERALD</div>
+    <div class="source-tab" data-filter="Other" onclick="filterFeed(this, 'Other')">OTHER</div>
+  </div>
+</header>
+
+<div class="ticker-wrap" id="ticker" style="display:none">
+  <div class="ticker-track" id="tickerTrack"></div>
+</div>
+
+<main>
+  <div class="empty-state" id="emptyState">
+    <div class="big-u">U</div>
+    <p>Click <strong>FETCH NEWS</strong> to pull the latest Hurricanes headlines.</p>
+    <p style="margin-top:8px; font-size:0.75rem; color:#444;">Powered by Claude AI · Multiple sources · Real-time search</p>
+  </div>
+  <div style="display:none" id="feedContainer">
+    <div class="feed-header">
+      <div class="feed-count">SHOWING <span id="feedCount">0</span> STORIES</div>
+      <div class="feed-filter" id="feedFilterLabel">ALL SOURCES</div>
+    </div>
+    <div class="news-list" id="newsList"></div>
+  </div>
+</main>
+
+<footer>
+  <p>CANESWIRE — Powered by <span class="powered">Gemini AI + Google Search</span> · <span style="cursor:pointer;color:#555;text-decoration:underline;" onclick="document.getElementById('keyModal').style.display='flex'">change api key</span></p>
+  <p id="footerTime"></p>
+</footer>
+
+<script>
+let allArticles = [];
+let currentFilter = 'all';
+
+const SOURCE_COLORS = {
+  'ESPN': 'orange',
+  '247Sports': 'green',
+  'On3': 'orange',
+  'Rivals': 'green',
+  'Miami Herald': 'gray',
+  'CanesInSight': 'green',
+  'Other': 'gray'
+};
+
+function getApiKey() {
+  return localStorage.getItem("canes_gemini_key") || "";
+}
+
+function saveKey() {
+  const val = document.getElementById("apiKeyInput").value.trim();
+  if (!val) { alert("Please enter your Gemini API key"); return; }
+  localStorage.setItem("canes_gemini_key", val);
+  document.getElementById("keyModal").style.display = "none";
+  fetchNews();
+}
+
+async function fetchNews() {
+  const key = getApiKey();
+  if (!key) {
+    document.getElementById("keyModal").style.display = "flex";
+    return;
+  }
+
+  const btn = document.getElementById("refreshBtn");
+  const emptyState = document.getElementById("emptyState");
+  const feedContainer = document.getElementById("feedContainer");
+
+  btn.disabled = true;
+  btn.textContent = "FETCHING...";
+  emptyState.innerHTML = "<div class=\"loading-state\"><div class=\"spinner\"></div><div class=\"loading-text\">SCANNING SOURCES...</div></div>";
+  emptyState.style.display = "block";
+  feedContainer.style.display = "none";
+
+  const prompt = `Search the web for the latest Miami Hurricanes FOOTBALL news from the past 48 hours. 
+Check ESPN, 247Sports, On3, Rivals, and the Miami Herald.
+FOOTBALL ONLY — recruiting, transfer portal, coaching, game results, spring practice, player news. No basketball, baseball or other sports.
+
+Return ONLY a valid JSON array, no markdown, no backticks, no explanation. Start with [ and end with ].
+Each item: {"headline":"...","summary":"1-2 sentence summary","source":"ESPN","url":"https://...","timeAgo":"3 hours ago","category":"Recruiting"}
+Categories: Recruiting, Transfer Portal, Coaching, Game Results, Spring Practice, NIL, General Football.
+Up to 16 items, newest first.`;
+
+  try {
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + key,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { temperature: 0.2 }
+        })
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json();
+      const msg = err?.error?.message || res.status;
+      if (res.status === 400 || res.status === 403) {
+        localStorage.removeItem("canes_gemini_key");
+        document.getElementById("keyModal").style.display = "flex";
+        throw new Error("Invalid API key: " + msg);
+      }
+      throw new Error("Gemini API error: " + msg);
+    }
+
+    const data = await res.json();
+    const raw = data?.candidates?.[0]?.content?.parts
+      ?.filter(function(p) { return p.text; })
+      ?.map(function(p) { return p.text; })
+      ?.join("\n") || "";
+
+    if (!raw.trim()) throw new Error("Gemini returned no text");
+
+    const stripped = raw.replace(/```json|```/gi, "").trim();
+    const start = stripped.indexOf("[");
+    const end = stripped.lastIndexOf("]");
+    if (start === -1 || end === -1) throw new Error("No JSON array in response");
+
+    allArticles = JSON.parse(stripped.substring(start, end + 1));
+    if (!Array.isArray(allArticles) || allArticles.length === 0) throw new Error("No articles found");
+
+    renderFeed(allArticles);
+
+  } catch (err) {
+    console.error(err);
+    emptyState.innerHTML =
+      "<div class=\"empty-state\"><div class=\"big-u\" style=\"color:#2a2a2a\">!</div>" +
+      "<p style=\"color:#888\">Could not load news. Please try again.</p>" +
+      "<p style=\"font-size:0.7rem;color:#555;margin-top:6px\">" + err.message + "</p></div>";
+    emptyState.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "REFRESH";
+    const now = new Date();
+    document.getElementById("lastUpdated").textContent =
+      "UPDATED " + now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    document.getElementById("footerTime").textContent =
+      now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  }
+}
+
+function renderFeed(articles) {
+  document.getElementById("emptyState").style.display = "none";
+  const feedContainer = document.getElementById("feedContainer");
+  feedContainer.style.display = "block";
+  document.getElementById("feedCount").textContent = articles.length;
+
+  const ticker = document.getElementById("ticker");
+  const tickerTrack = document.getElementById("tickerTrack");
+  const doubled = articles.concat(articles);
+  tickerTrack.innerHTML = doubled.map(function(a) {
+    return "<span class=\"ticker-item\">" + a.source + ": " + a.headline + "</span>";
+  }).join("");
+  ticker.style.display = "block";
+
+  renderList(articles, "newsList", 40);
+}
+
+function renderList(articles, containerId, delay) {
+  const list = document.getElementById(containerId);
+  list.innerHTML = "";
+  articles.forEach(function(item, i) {
+    const colorClass = SOURCE_COLORS[item.source] || "gray";
+    const hasUrl = item.url && item.url.startsWith("http");
+    const div = document.createElement("div");
+    div.className = "news-item";
+    div.style.animationDelay = (i * (delay || 30)) + "ms";
+    div.innerHTML =
+      "<div class=\"item-num\">" + String(i + 1).padStart(2, "0") + "</div>" +
+      "<div class=\"item-body\">" +
+        "<span class=\"item-source-tag " + colorClass + "\">" + item.source + "</span>" +
+        "<div class=\"item-headline\">" + item.headline + "</div>" +
+        "<div class=\"item-summary\">" + (item.summary || "") + "</div>" +
+        "<div class=\"item-meta\">" +
+          "<span class=\"item-time\">" + (item.timeAgo || "") + "</span>" +
+          "<span class=\"item-category\">" + (item.category || "") + "</span>" +
+        "</div>" +
+      "</div>" +
+      "<div class=\"item-link\">" +
+        (hasUrl ? "<a href=\"" + item.url + "\" target=\"_blank\" rel=\"noopener\">READ &rarr;</a>" : "") +
+      "</div>";
+    if (hasUrl) div.onclick = function() { window.open(item.url, "_blank", "noopener"); };
+    list.appendChild(div);
+  });
+}
+
+function filterFeed(tab, filter) {
+  document.querySelectorAll(".source-tab").forEach(function(t) { t.classList.remove("active"); });
+  tab.classList.add("active");
+  currentFilter = filter;
+  const label = document.getElementById("feedFilterLabel");
+  let filtered;
+  if (filter === "all") {
+    filtered = allArticles; label.textContent = "ALL SOURCES";
+  } else if (filter === "Other") {
+    const known = ["ESPN", "247Sports", "On3", "Rivals", "Miami Herald"];
+    filtered = allArticles.filter(function(a) { return !known.includes(a.source); });
+    label.textContent = "OTHER SOURCES";
+  } else {
+    filtered = allArticles.filter(function(a) { return a.source === filter; });
+    label.textContent = filter.toUpperCase();
+  }
+  if (allArticles.length > 0) {
+    document.getElementById("feedCount").textContent = filtered.length;
+    renderList(filtered, "newsList", 30);
+  }
+}
+</script>
+
+<!-- API Key Modal -->
+<div id="keyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#111;border:1px solid #F47321;padding:36px;max-width:440px;width:90%;font-family:'DM Sans',sans-serif;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:#F47321;letter-spacing:0.1em;margin-bottom:6px;">ENTER API KEY</div>
+    <p style="color:#999;font-size:0.82rem;line-height:1.5;margin-bottom:20px;">
+      You need a free Google Gemini API key to fetch live news.<br>Get one free (no credit card) at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#F47321;">aistudio.google.com</a> → Get API Key.
+    </p>
+    <input id="apiKeyInput" type="password" placeholder="AIza..." 
+      style="width:100%;background:#0a0a0a;border:1px solid #333;color:#fff;padding:10px 14px;font-family:'Courier Prime',monospace;font-size:0.8rem;letter-spacing:0.05em;margin-bottom:12px;outline:none;"
+      onkeydown="if(event.key==='Enter')saveKey()"
+    />
+    <div style="display:flex;gap:10px;">
+      <button onclick="saveKey()" style="flex:1;background:#F47321;color:#000;border:none;font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.12em;padding:10px;cursor:pointer;">SAVE & FETCH</button>
+      <button onclick="document.getElementById('keyModal').style.display='none'" style="background:#1e1e1e;color:#888;border:none;font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.12em;padding:10px 16px;cursor:pointer;">✕</button>
+    </div>
+    <p style="color:#444;font-size:0.65rem;font-family:'Courier Prime',monospace;margin-top:14px;line-height:1.5;">
+      Key is saved in your browser only. Never shared. Gemini API is completely free for personal use.
+    </p>
+  </div>
+</div>
+
+</body>
+</html>
